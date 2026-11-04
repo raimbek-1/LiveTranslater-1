@@ -1,0 +1,53 @@
+name: Test and build Windows
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install numpy pytest requests ruff
+      - run: python -m pytest tests/test_core.py tests/test_services.py tests/test_translation.py tests/test_cli.py -q
+      - run: ruff check src tests
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install CPU runtime and project
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - name: Test without audio hardware
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: Bundle directory with executable
+        run: >-
+          pyinstaller --noconfirm --clean --onedir --console --name LiveTranslate
+          --collect-all faster_whisper --collect-all silero_vad
+          --collect-all argostranslate --collect-all ctranslate2
+          --collect-all sentencepiece --collect-all onnxruntime
+          --collect-all soxr --collect-all pyaudiowpatch
+          --hidden-import PySide6.QtTextToSpeech
+          run_app.py
+      - name: Executable smoke test
+        run: dist/LiveTranslate/LiveTranslate.exe --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiveTranslate-Windows-x64
+          path: dist/LiveTranslate/
+          if-no-files-found: error
+          retention-days: 14

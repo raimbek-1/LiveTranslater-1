@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "livetranslate"
+version = "0.1.0"
+description = "Local German–Russian live subtitles for Windows"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "PySide6>=6.8,<7", "numpy>=1.26,<3", "soxr>=0.5,<1",
+  "faster-whisper>=1.1,<2", "silero-vad>=6,<7",
+  "argostranslate>=1.11,<1.12", "requests>=2.32,<3",
+  "PyAudioWPatch>=0.2.12.7,<0.3; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.9,<1", "pyinstaller>=6.11,<7"]
+
+[project.scripts]
+livetranslate = "livetranslate.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
