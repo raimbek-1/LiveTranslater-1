@@ -3,6 +3,10 @@ import sys
 
 
 def main():
+    # Windows redirected consoles may default to cp1252, which cannot print Russian.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     parser = argparse.ArgumentParser(description="LiveTranslate — локальные немецко-русские субтитры")
     parser.add_argument("--setup-models", action="store_true", help="Скачать Whisper base и Argos de→en→ru")
     args = parser.parse_args()
