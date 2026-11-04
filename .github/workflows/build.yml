@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install numpy pytest requests ruff
-      - run: python -m pytest tests/test_core.py tests/test_services.py tests/test_translation.py tests/test_cli.py -q
+      - run: python -m pytest tests/test_core.py tests/test_services.py tests/test_translation.py tests/test_cli.py tests/test_audio_session.py -q
       - run: ruff check src tests
   windows-exe:
     runs-on: windows-latest

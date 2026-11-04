@@ -1,19 +1,66 @@
 """Windows-only WASAPI capture; one independent reader/VAD per source."""
+import ctypes
 import queue
 import sys
 import time
-from threading import Thread
+from contextlib import contextmanager
+from threading import RLock, Thread
 
 import numpy as np
 
 from .core import FRAME, RATE, Segmenter
+
+_audio_lock = RLock()
+_audio = None
+_audio_users = 0
+
+
+@contextmanager
+def audio_session():
+    """Share one PortAudio lifetime across capture threads.
+
+    Pa_Initialize/Pa_Terminate are process-global and must not race when
+    microphone and loopback readers start or stop together.
+    """
+    global _audio, _audio_users
+    import pyaudiowpatch as pa
+
+    # WASAPI also requires COM on each thread that opens an audio client.
+    com = ctypes.OleDLL('ole32') if sys.platform == 'win32' else None
+    initialized = False
+    try:
+        if com is not None:
+            try:
+                com.CoInitializeEx(None, 0)
+                initialized = True
+            except OSError as exc:
+                if exc.winerror != -2147417850:  # RPC_E_CHANGED_MODE: COM already initialized
+                    raise
+        with _audio_lock:
+            if _audio is None:
+                _audio = pa.PyAudio()
+            _audio_users += 1
+            audio = _audio
+        try:
+            yield audio
+        finally:
+            with _audio_lock:
+                _audio_users -= 1
+                if _audio_users == 0:
+                    try:
+                        audio.terminate()
+                    finally:
+                        _audio = None
+    finally:
+        if initialized:
+            com.CoUninitialize()
 
 
 def devices():
     if sys.platform != "win32":
         raise RuntimeError("Захват WASAPI доступен только в Windows 10/11")
     import pyaudiowpatch as pa
-    with pa.PyAudio() as audio:
+    with audio_session() as audio:
         wasapi = audio.get_host_api_info_by_type(pa.paWASAPI)
         return [(int(d["index"]), d["name"], bool(d.get("isLoopbackDevice")))
                 for d in audio.get_device_info_generator()
@@ -49,7 +96,7 @@ class Capture(Thread):
             vad = load_silero_vad(onnx=True)
             segmenter = Segmenter()
             pending = np.empty(0, dtype=np.float32)
-            with pa.PyAudio() as audio:
+            with audio_session() as audio:
                 device = (audio.get_device_info_by_index(self.device) if self.device is not None
                           else audio.get_default_wasapi_loopback() if self.source == "Система"
                           else audio.get_device_info_by_index(
